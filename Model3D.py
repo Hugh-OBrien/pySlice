@@ -3,6 +3,7 @@ from struct import unpack
 from math import fabs, sqrt
 from sympy import Plane, Point3D, Segment3D
 from sys import stdout
+import numpy as np
 
 # This is the difference between points, below which we can consider them equal.
 DIFFERENCE_LIMIT = 1e-7
@@ -243,28 +244,93 @@ class Triangle(object):
 
 	def find_interpolated_points_at_plane(self, plane):
 		pair = []
-		v1 = Point3D(self.vertices[0].x, self.vertices[0].y, self.vertices[0].z)
-		if float(plane.distance(v1)) > 10:
-			return pair
+		v1 = [self.vertices[0].x, self.vertices[0].y, self.vertices[0].z]
 
-		v2 = Point3D(self.vertices[1].x, self.vertices[1].y, self.vertices[1].z)
-		v3 = Point3D(self.vertices[2].x, self.vertices[2].y, self.vertices[2].z)
-		l1 = Segment3D(v1, v2)
-		l2 = Segment3D(v1, v3)
-		l3 = Segment3D(v2, v3)
+		v2 = [self.vertices[1].x, self.vertices[1].y, self.vertices[1].z]
+		v3 = [self.vertices[2].x, self.vertices[2].y, self.vertices[2].z]
 
-		i1 = plane.intersection(l1)[0]
-		i2 = plane.intersection(l2)[0]
-		i3 = plane.intersection(l3)[0]
+		i1 = isect_line_plane_v3(v1, v2, plane.p1, plane.normal_vector)
+		i2 = isect_line_plane_v3(v1, v3, plane.p1, plane.normal_vector)
+		i3 = isect_line_plane_v3(v2, v3, plane.p1, plane.normal_vector)
 
-		if l1.contains(i1):
+		if i1:
 			pair.append(i1)
-		if l2.contains(i2):
+		if i2:
 			pair.append(i2)
-		if l3.contains(i3):
+		if i3:
 			pair.append(i3)
 
 		return pair
+
+	# intersection function
+	def isect_line_plane_v3(p0, p1, p_co, p_no, epsilon=1e-6):
+		"""
+		p0, p1: define the line
+		p_co, p_no: define the plane:
+          p_co is a point on the plane (plane coordinate).
+		  p_no is a normal vector defining the plane direction;
+             (does not need to be normalized).
+
+		return a Vector or None (when the intersection can't be found).
+		"""
+
+		u = sub_v3v3(p1, p0)
+		dot = dot_v3v3(p_no, u)
+
+		if abs(dot) > epsilon:
+			# the factor of the point between p0 -> p1 (0 - 1)
+			# if 'fac' is between (0 - 1) the point intersects with the segment.
+			# otherwise:
+			#  < 0.0: behind p0.
+			#  > 1.0: infront of p1.
+			w = sub_v3v3(p0, p_co)
+			fac = -dot_v3v3(p_no, w) / dot
+			u = mul_v3_fl(u, fac)
+			if fac >= 0 and fac <= 1:
+				return add_v3v3(p0, u)
+			else:
+				return None
+		else:
+			# The segment is parallel to plane
+			return None
+
+# ----------------------
+# generic math functions
+
+def add_v3v3(v0, v1):
+    return (
+        v0[0] + v1[0],
+        v0[1] + v1[1],
+        v0[2] + v1[2],
+        )
+
+
+def sub_v3v3(v0, v1):
+    return (
+        v0[0] - v1[0],
+        v0[1] - v1[1],
+        v0[2] - v1[2],
+        )
+
+
+def dot_v3v3(v0, v1):
+    return (
+        (v0[0] * v1[0]) +
+        (v0[1] * v1[1]) +
+        (v0[2] * v1[2])
+        )
+
+
+def len_squared_v3(v0):
+    return dot_v3v3(v0, v0)
+
+
+def mul_v3_fl(v0, f):
+    return (
+        v0[0] * f,
+        v0[1] * f,
+        v0[2] * f,
+        )
 		
 
 class Model3D(object):
@@ -432,12 +498,14 @@ class Model3D(object):
 		'''Function to slice the model at certain transforms of a plane.
 		Returns an array of tuples, describing the various lines between
 		points'''
-		length = len(self.triangles)
+		tris = np.array(self.triangles[::10])
+		length = len(tris)
+		print("Looping over Tris: ", length)
 		output = []
 
-		for i, triangle in enumerate(self.triangles):
+		for i, triangle in enumerate(tris):
 			points = triangle.find_interpolated_points_at_plane(plane)
-
+			points_lens.append(len(points))
 			if len(points) == 2:
 				output.append((self.convert_to_2d(x_axis, y_axis, points[0]),
 							   self.convert_to_2d(x_axis, y_axis, points[1])))
