@@ -501,6 +501,11 @@ class Model3D(object):
 		tris = np.array(self.triangles)
 		length = len(tris)
 		print("Looping over Tris: ", length)
+		## sub sample
+		tris = np.random.choice(tris, int(length - length*.2))
+		length = len(tris)
+		print("Sampled down to: ", length)
+		
 		output = []
 
 		for i, triangle in enumerate(tris):
